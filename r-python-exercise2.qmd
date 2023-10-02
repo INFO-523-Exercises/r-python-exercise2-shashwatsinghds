@@ -1,0 +1,260 @@
+---
+title: "r-python-exercise2"
+author: "Shashwat Singh"
+format: html
+editor: visual
+description: "Data Preprocessing in R: Practice basic R commands/methods for descriptive data analysis."
+---
+
+# Loading Required Packages
+
+```{r eval=TRUE,echo=FALSE}
+
+library(pacman)
+
+p_load(DBI, # DBI databases
+       dlookr,
+       here, # Reproducible/ standard directories
+       janitor,
+       RMySQL, # Utilizing MySQL drivers
+       tidymodels, # Tidyverse format modeling (e.g., lm())
+       tidyverse, # Data wrangling, manipulation, visualization
+       qqplotr) 
+```
+
+# Loading Data
+
+## **CSV Files(`.csv`)**
+
+```{r}
+data <- read_csv(here("data", "x.csv"))
+
+data |> glimpse()
+```
+
+The \|\> is the Base R pipe as opposed to the magrittr pipe \|\>. The \|\> pipe can be utilized for most functions in R, while the \|\> pipe is more restricted towards the tidyverse.
+
+## **Tab separated values (`x.tsv`)**
+
+```{r}
+#data<-read_delim("/Users/shashwatsingh/Documents/GitHub/r-python-exercise2-shashwatsinghds/data/x.tsv")
+
+data<-read_delim(here("data","x.tsv"))
+
+data |> glimpse() 
+```
+
+# Importing data from MySQL database
+
+First connect to a database in a MySQL database management system, then query tables in the database to obtain desired dataset.
+
+```{r}
+drv <- dbDriver("MySQL") #Creating a database driver object specific to MySQL
+
+#Skipping 
+```
+
+Get a connection to my local mysql database etcsite_charaparser.(Skipping this step as I don't have a local db setup)
+
+# Data Cleaning
+
+## Wide vs Long format
+
+Read data in wide format
+
+```{r}
+wide <- read_delim(here("data", "wide.txt"), delim = " ", skip = 1, col_names = c("Name", "Math", "English", "Degree_Year"))
+
+#wide <- read_delim("/Users/shashwatsingh/Documents/GitHub/r-python-exercise2-shashwatsinghds/data/wide.txt", delim = " ", skip = 1, col_names = c("Name", "Math", "English", "Degree_Year"))
+
+```
+
+The wide format uses the values (`Math`, `English`) of variable `Subjects` as variables.
+
+The long format should have `Name`, `Subject`, and `Grade` as variables (i.e., columns).
+
+```{r}
+long<- wide|>
+  pivot_longer(cols=c (Math,English),
+               names_to="Subject",
+               values_to= "Grade")
+
+long
+```
+
+## **Long to wide, use `spread()`**
+
+```{r}
+wide <- long %>%
+  pivot_wider(names_from = Subject, values_from = Grade)
+wide
+```
+
+## **Split a column into multiple columns**
+
+```{r}
+clean <- long %>%
+  separate(Degree_Year, c("Degree", "Year"), sep = "_")
+
+clean
+```
+
+## **Handling date/time and time zones**
+
+```{r}
+if(!require("lubridate"))
+  install.packages("lubridate")
+library(lubridate)
+```
+
+Convert dates of variance formats into one format:
+
+```{r}
+mixed.dates <- c(20140123, "2019-12-12", "2009/5/1",
+ "measured on 2002-12-06", "2018-7/16")
+clean.dates <- ymd(mixed.dates) #convert to year-month-day format
+clean.dates
+```
+
+
+Extract day, week, month, year info from dates:
+
+
+```{r}
+
+data.frame(Dates = clean.dates, WeekDay = wday(clean.dates), nWeekDay = wday(clean.dates, label = TRUE), Year = year(clean.dates), Month = month(clean.dates, label = TRUE))
+```
+
+
+Time zone:
+
+```{r}
+date.time <- ymd_hms("20190203 03:00:03", tz="Asia/Shanghai")
+```
+
+Convert to Phoenix time:
+
+```{r}
+with_tz(date.time, tz="America/Phoenix")
+```
+
+Change the timezone for a time:
+
+```{r}
+force_tz(date.time, "Turkey")
+```
+
+
+Check available time zones:
+
+```{r, echo=FALSE}
+OlsonNames()
+```
+
+# String Processing
+
+Common needs: stringr package
+
+Advanced needs: stringi package
+
+The following code shows the use of functions provided by stringr package to put column names back to a dataset fetched from http://archive.ics.uci.edu/ml/machine-learning-databases/audiology/
+
+```{r}
+library(dplyr)
+library(stringr)
+library(readr)
+
+uci.repo <-"http://archive.ics.uci.edu/ml/machine-learning-databases/"
+
+dataset <- "audiology/audiology.standardized"
+```
+
+str_c: used for string concatenation:
+
+```{r}
+dataF <- str_c(uci.repo, dataset, ".data")
+namesF <- str_c(uci.repo, dataset, ".names")
+dataF
+```
+
+
+Read the data file:
+```{r}
+data <- read_csv(url(dataF), col_names = FALSE, na="?")
+```
+
+Get No Of Rows and Columns:
+```{r}
+dim(data)
+```
+
+Read the name file line by line, put the lines in a vector:
+```{r}
+lines <- read_lines(url(namesF))
+
+lines |> head()
+```
+
+
+Examine the content of lines and see the column names start on line 67, ends on line 135. Then, get column name lines and clean up to get column names:
+
+```{r}
+names <- lines[67:135]
+names
+```
+
+
+Observe: a name line consists two parts, name: valid values. The part before : is the name.
+
+```{r}
+names <- str_split_fixed(names, ":", 2) #split on regex pattern ":", this function returns a matrix
+names
+```
+
+Taking the first column, which contains names:
+
+```{r}
+names <- names[,1]
+names
+
+```
+
+Clean up the names: trim spaces, remove ():
+
+```{r}
+names <-str_trim(names) |> str_replace_all("\\(|\\)", "") names
+```
+
+
+Finally, put the columns to the data:
+
+Note: data has 71 rows but we only has 69 names. The last two columns in data are identifier and class labels. So we will put the 69 names to the first 69 columns.
+
+```{r}
+colnames(data)[1:69] <- names
+data
+```
+
+Rename the last two columns:
+
+```{r}
+colnames(data)[70:71] <- c("id", "class")
+data
+```
+
+
+## Dealing with unknown values 
+
+Remove observations or columns with many NAs:
+
+```{r}
+library(dplyr)
+
+missing.value.rows <- data |>
+  filter(!complete.cases(data))
+missing.value.rows
+```
+
+
+
+
